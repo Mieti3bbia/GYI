@@ -9,9 +9,12 @@ export interface DraftInput {
   geographicArea: string;
 }
 
-export interface DraftSummary {
+export type ItineraryStatus = 'pending' | 'confirmed';
+
+export interface ItinerarySummary {
   id: string;
   title: string;
+  status: ItineraryStatus;
 }
 
 export interface FixedStop {
@@ -25,13 +28,17 @@ export interface FixedStop {
   sourceUrl: string | null;
 }
 
+export interface CatalogStop extends FixedStop {
+  canAddToItinerary: boolean;
+}
+
 export interface Segment {
   order: number;
   departureStopId: string;
   arrivalStopId: string;
 }
 
-export interface Draft extends DraftSummary {
+export interface ItineraryDetail extends ItinerarySummary {
   theme: string | null;
   description: string;
   geographicArea: string | null;
@@ -44,23 +51,27 @@ export class ItinerariesApi {
   private readonly http = inject(HttpClient);
   private readonly path = '/api/itineraries';
 
-  mine(): Observable<DraftSummary[]> {
-    return this.http.get<DraftSummary[]>(`${this.path}/mine`);
+  mine(): Observable<ItinerarySummary[]> {
+    return this.http.get<ItinerarySummary[]>(`${this.path}/mine`);
   }
 
-  detail(id: string): Observable<Draft> {
-    return this.http.get<Draft>(`${this.path}/${id}`);
+  detail(id: string): Observable<ItineraryDetail> {
+    return this.http.get<ItineraryDetail>(`${this.path}/${id}`);
   }
 
-  fixedStops(): Observable<FixedStop[]> {
-    return this.http.get<FixedStop[]>('/api/stops/fixed');
+  stops(): Observable<CatalogStop[]> {
+    return this.http.get<CatalogStop[]>('/api/stops');
   }
 
-  create(input: DraftInput & { stopIds: string[] }): Observable<DraftSummary> {
-    return this.http.post<DraftSummary>(this.path, input);
+  create(input: DraftInput & { stopIds: string[] }): Observable<ItinerarySummary> {
+    return this.http.post<ItinerarySummary>(this.path, input);
   }
 
   updateStops(id: string, stopIds: string[]): Observable<void> {
     return this.http.put<void>(`${this.path}/${id}/stops`, { stopIds });
+  }
+
+  confirm(id: string): Observable<void> {
+    return this.http.put<void>(`${this.path}/${id}/confirm`, null);
   }
 }

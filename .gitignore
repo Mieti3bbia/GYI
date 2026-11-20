@@ -1,0 +1,4 @@
+/obj/
+/Backend/bin/
+/Backend/obj/
+.env

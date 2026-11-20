@@ -2,14 +2,14 @@
   class="stop-picker"
   [attr.aria-describedby]="error() ? 'stop-selection-error' : 'stop-hint'"
 >
-  <legend>Tappe fisse</legend>
-  <p id="stop-hint">Aggiungi le tappe e disponile nell’ordine di visita.</p>
+  <legend>Catalogo tappe</legend>
+  <p id="stop-hint">Puoi aggiungere le tappe fisse approvate e ordinarle per la visita.</p>
   <div class="field">
     <label for="stop-search">Cerca per nome, comune o provincia</label>
     <input id="stop-search" type="search" #searchInput (input)="search(searchInput.value)" />
   </div>
   <div class="field">
-    <label for="catalog-stop">Tappa da aggiungere</label>
+    <label for="catalog-stop">Scegli una tappa</label>
     <select
       id="catalog-stop"
       #stopSelect
@@ -21,11 +21,25 @@
       </option>
       @for (stop of available(); track stop.id) {
         <option [value]="stop.id">
-          {{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}
+          {{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}{{
+            stop.province ? ' · ' + stop.province : ''
+          }}
         </option>
       }
     </select>
-    <button type="button" class="secondary" [disabled]="!choice()" (click)="add()">
+    @if (candidate(); as stop) {
+      <p>{{ stop.description }}</p>
+      <p>Latitudine {{ stop.latitude }}, longitudine {{ stop.longitude }}</p>
+      @if (!stop.canAddToItinerary) {
+        <p>Questa tappa non è aggiungibile all’itinerario.</p>
+      }
+    }
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="!candidate()?.canAddToItinerary"
+      (click)="add()"
+    >
       Aggiungi tappa
     </button>
   </div>

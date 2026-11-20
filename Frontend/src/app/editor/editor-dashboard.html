@@ -21,7 +21,7 @@
   }
   @if ((creating() || editingStops()) && catalogError()) {
     <div class="panel">
-      <p class="error" role="alert">Impossibile caricare il catalogo delle tappe fisse.</p>
+      <p class="error" role="alert">Impossibile caricare il catalogo delle tappe.</p>
       <button type="button" class="secondary" (click)="loadCatalog()">Ricarica catalogo</button>
     </div>
   }
@@ -66,11 +66,11 @@
             />
           }
           @if (saveError()) {
-            <p class="error" role="alert">Impossibile salvare la bozza. Riprova.</p>
+            <p class="error" role="alert">Impossibile proporre l’itinerario. Riprova.</p>
           }
           <div class="actions">
             <button type="submit" [disabled]="loading() || catalogLoading()">
-              {{ saving() ? 'Salvataggio…' : 'Salva bozza' }}
+              {{ saving() ? 'Salvataggio…' : 'Proponi itinerario' }}
             </button>
             <button type="button" class="secondary" (click)="creating.set(false)">Annulla</button>
           </div>
@@ -80,37 +80,42 @@
   }
 
   @if (!detailId()) {
-    <section class="panel" aria-labelledby="drafts-title">
-      <h2 id="drafts-title">Bozze</h2>
+    <section class="panel" aria-labelledby="itineraries-title">
+      <h2 id="itineraries-title">Itinerari</h2>
       @if (loading()) {
-        <p role="status">Caricamento delle bozze…</p>
+        <p role="status">Caricamento degli itinerari…</p>
       }
       @if (listError()) {
-        <p class="error" role="alert">Impossibile caricare le bozze.</p>
+        <p class="error" role="alert">Impossibile caricare gli itinerari.</p>
         <button
           type="button"
           class="secondary"
           [disabled]="loading() || saving()"
-          (click)="loadDrafts()"
+          (click)="loadItineraries()"
         >
           Riprova
         </button>
-      } @else if (!loading() && drafts().length === 0) {
-        <p>Non hai ancora bozze.</p>
+      } @else if (!loading() && itineraries().length === 0) {
+        <p>Non hai ancora itinerari.</p>
       }
-      @if (drafts().length > 0) {
+      @if (itineraries().length > 0) {
         <ul class="drafts">
-          @for (draft of drafts(); track draft.id) {
+          @for (itinerary of itineraries(); track itinerary.id) {
             <li class="row">
-              <strong>{{ draft.title }}</strong>
+              <div>
+                <strong>{{ itinerary.title }}</strong>
+                <p>
+                  {{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}
+                </p>
+              </div>
               <button
                 type="button"
                 class="secondary"
                 [disabled]="saving()"
-                [attr.aria-label]="'Apri bozza: ' + draft.title"
-                [routerLink]="['/editor', draft.id]"
+                [attr.aria-label]="'Apri itinerario: ' + itinerary.title"
+                [routerLink]="['/editor', itinerary.id]"
               >
-                Apri bozza
+                Apri itinerario
               </button>
             </li>
           }
@@ -120,23 +125,25 @@
   }
 
   @if (opening()) {
-    <p role="status">Apertura della bozza…</p>
+    <p role="status">Apertura dell’itinerario…</p>
   }
   @if (detailError(); as error) {
     <p class="error" role="alert">{{ error }}</p>
     <button type="button" class="secondary" (click)="retryDetail()">Riprova</button>
   }
-  @if (detail(); as draft) {
+  @if (detail(); as itinerary) {
     <section class="panel" aria-labelledby="detail-title">
-      <h2 id="detail-title">Dettaglio bozza</h2>
+      <h2 id="detail-title">Dati dell’itinerario</h2>
       <dl>
+        <dt>Stato</dt>
+        <dd>{{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}</dd>
         @for (field of fields; track field.key) {
           <dt>{{ field.label }}</dt>
-          <dd>{{ draft[field.key] ?? '—' }}</dd>
+          <dd>{{ itinerary[field.key] ?? '—' }}</dd>
         }
       </dl>
       @if (editingStops()) {
-        <form (submit)="$event.preventDefault(); saveStops(draft.id)">
+        <form (submit)="$event.preventDefault(); saveStops(itinerary.id)">
           <fieldset [disabled]="saving()">
             @if (!catalogLoading() && !catalogError()) {
               <app-stop-picker
@@ -150,9 +157,7 @@
               <p class="error" role="alert">Impossibile aggiornare le tappe. Riprova.</p>
             }
             <div class="actions">
-              <button type="submit" [disabled]="catalogLoading()">
-                Salva tappe
-              </button>
+              <button type="submit" [disabled]="catalogLoading()">Salva tappe</button>
               <button type="button" class="secondary" (click)="editingStops.set(false)">
                 Annulla
               </button>
@@ -161,18 +166,33 @@
         </form>
       } @else {
         <h3>Tappe fisse</h3>
-        @if (draft.stops.length) {
+        @if (itinerary.stops.length) {
           <ol class="ordered-stops" aria-label="Ordine di visita salvato">
-            @for (stop of draft.stops; track $index) {
+            @for (stop of itinerary.stops; track $index) {
               <li>{{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}</li>
             }
           </ol>
         } @else {
-          <p>La bozza è ancora senza tappe.</p>
+          <p>L’itinerario è ancora senza tappe.</p>
         }
-        <div>
-          <button type="button" class="secondary" (click)="editStops(draft)">Modifica tappe</button>
-        </div>
+        @if (itinerary.status === 'pending') {
+          @if (confirmError()) {
+            <p class="error" role="alert">Impossibile confermare l’itinerario. Riprova.</p>
+          }
+          <div class="actions">
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="saving()"
+              (click)="editStops(itinerary)"
+            >
+              Modifica tappe
+            </button>
+            <button type="button" [disabled]="saving()" (click)="confirmItinerary(itinerary)">
+              {{ saving() ? 'Conferma in corso…' : 'Conferma itinerario' }}
+            </button>
+          </div>
+        }
       }
     </section>
   }

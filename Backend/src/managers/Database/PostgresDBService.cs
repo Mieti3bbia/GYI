@@ -8,20 +8,30 @@ namespace FYI.Managers.Database;
 public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
 {
     private const string Accepted = nameof(PublicationStatusEnum.Accepted);
+    private static readonly string Pending = ToDatabaseStatus(ItineraryStatus.Pending);
+    private static readonly string Confirmed = ToDatabaseStatus(ItineraryStatus.Confirmed);
     private const string StopColumns = """
         s.id, s.name, s.description, s.coordinatey, s.coordinatex, s.municipality, s.province,
         s.source_url, s.status, s.is_fixed, s.cap, s.price, s.proposed_by, s.created_at,
         s.updated_at, s.approved_by, s.approved_at
         """;
 
-    public async Task<IReadOnlyList<Stop>> GetFixedStopsAsync(Guid[]? ids, CancellationToken ct)
+    public Task<IReadOnlyList<Stop>> GetStopsAsync(CancellationToken ct) =>
+        ReadStopsAsync(fixedOnly: false, ids: null, ct);
+
+    public Task<IReadOnlyList<Stop>> GetFixedStopsAsync(Guid[]? ids, CancellationToken ct) =>
+        ReadStopsAsync(fixedOnly: true, ids, ct);
+
+    private async Task<IReadOnlyList<Stop>> ReadStopsAsync(bool fixedOnly, Guid[]? ids, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand($"""
             SELECT {StopColumns} FROM fyi.stop s
-            WHERE s.is_fixed AND s.status = @accepted AND (@ids IS NULL OR s.id = ANY(@ids))
+            WHERE (NOT @fixedOnly OR (s.is_fixed AND s.status = @accepted))
+              AND (@ids IS NULL OR s.id = ANY(@ids))
             ORDER BY s.province, s.municipality, s.name, s.id
             """);
         command.Parameters.AddWithValue("accepted", Accepted);
+        command.Parameters.AddWithValue("fixedOnly", fixedOnly);
         command.Parameters.AddWithValue("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid, (object?)ids ?? DBNull.Value);
 
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -33,35 +43,38 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
         return stops;
     }
 
-    public async Task<IReadOnlyList<(Guid Id, string Title)>> GetDraftsAsync(Guid editor, CancellationToken ct)
+    public async Task<IReadOnlyList<(Guid Id, string Title, ItineraryStatus Status)>> GetItinerariesAsync(
+        Guid editor, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("""
-            SELECT id, title FROM fyi.itinerary
-            WHERE created_by = @editor AND status = @draft
+            SELECT id, title, status FROM fyi.itinerary
+            WHERE created_by = @editor AND status IN (@pending, @confirmed)
             ORDER BY created_at DESC NULLS LAST, id
             """);
         AddEditorScope(command, editor);
+        command.Parameters.AddWithValue("confirmed", Confirmed);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        var drafts = new List<(Guid, string)>();
+        var itineraries = new List<(Guid, string, ItineraryStatus)>();
         while (await reader.ReadAsync(ct))
         {
-            drafts.Add((reader.GetGuid(0), reader.GetString(1)));
+            itineraries.Add((reader.GetGuid(0), reader.GetString(1), ReadItineraryStatus(reader, 2)));
         }
-        return drafts;
+        return itineraries;
     }
 
-    public async Task<StoredItinerary?> GetDraftAsync(Guid editor, Guid id, CancellationToken ct)
+    public async Task<StoredItinerary?> GetItineraryAsync(Guid editor, Guid id, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand($"""
             SELECT i.title, i.theme, i.description, i.geographic_area, i.is_customizable, i.created_at,
-                   i.updated_by, i.updated_at, {StopColumns}
+                   i.updated_by, i.updated_at, i.status, {StopColumns}
             FROM fyi.itinerary i
             LEFT JOIN fyi.itinerary_stops links ON links.itinerary_id = i.id
             LEFT JOIN fyi.stop s ON s.id = links.stop_id
-            WHERE i.id = @id AND i.created_by = @editor AND i.status = @draft
+            WHERE i.id = @id AND i.created_by = @editor AND i.status IN (@pending, @confirmed)
             ORDER BY links."order", links.id
             """);
         AddEditorScope(command, editor);
+        command.Parameters.AddWithValue("confirmed", Confirmed);
         command.Parameters.AddWithValue("id", id);
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
@@ -80,15 +93,15 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
             CreatedAt = ReadNullable<DateTime>(reader, 5),
             UpdatedBy = ReadNullable<Guid>(reader, 6),
             UpdatedAt = ReadNullable<DateTime>(reader, 7),
-            Status = Itinerary.DraftStatus,
+            Status = ReadItineraryStatus(reader, 8),
             CreatedBy = editor
         };
         var stops = new List<Stop>();
         do
         {
-            if (!reader.IsDBNull(8))
+            if (!reader.IsDBNull(9))
             {
-                stops.Add(ReadStop(reader, 8));
+                stops.Add(ReadStop(reader, 9));
             }
         } while (await reader.ReadAsync(ct));
 
@@ -113,7 +126,7 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
         command.Parameters.AddWithValue("theme", itinerary.Theme!);
         command.Parameters.AddWithValue("description", itinerary.Description);
         command.Parameters.AddWithValue("area", itinerary.GeographicArea!);
-        command.Parameters.AddWithValue("status", itinerary.Status);
+        command.Parameters.AddWithValue("status", ToDatabaseStatus(itinerary.Status));
         command.Parameters.AddWithValue("customizable", itinerary.IsCustomizable);
         command.Parameters.AddWithValue("editor", editor);
         if (await command.ExecuteNonQueryAsync(ct) == 0)
@@ -138,7 +151,7 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
         await using var update = new NpgsqlCommand("""
             UPDATE fyi.itinerary
             SET updated_by = @editor, updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
-            WHERE id = @id AND created_by = @editor AND status = @draft
+            WHERE id = @id AND created_by = @editor AND status = @pending
             """, connection, transaction);
         AddEditorScope(update, editor);
         update.Parameters.AddWithValue("id", id);
@@ -159,6 +172,31 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
         await InsertStopsAsync(connection, transaction, id, editor, stopIds, ct);
         await transaction.CommitAsync(ct);
         return ItineraryWriteResult.Saved;
+    }
+
+    public async Task<bool> ConfirmItineraryAsync(Guid editor, Guid id, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("""
+            UPDATE fyi.itinerary
+            SET status = @confirmed, updated_by = @editor, updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+            WHERE id = @id AND created_by = @editor AND status = @pending
+            """);
+        AddEditorScope(command, editor);
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("confirmed", Confirmed);
+        if (await command.ExecuteNonQueryAsync(ct) == 1)
+        {
+            return true;
+        }
+
+        // A retry after a successful confirmation leaves the original update metadata intact.
+        command.CommandText = """
+            SELECT EXISTS (
+                SELECT 1 FROM fyi.itinerary
+                WHERE id = @id AND created_by = @editor AND status = @confirmed
+            )
+            """;
+        return await command.ExecuteScalarAsync(ct) is true;
     }
 
     private static async Task<bool> LockFixedStopsAsync(
@@ -206,7 +244,7 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
         IsFixed = reader.GetBoolean(offset + 9),
         Cap = reader.GetDecimal(offset + 10),
         Price = reader.GetDecimal(offset + 11),
-        ProposedBy = reader.GetGuid(offset + 12),
+        ProposedBy = ReadNullable<Guid>(reader, offset + 12),
         CreatedAt = ReadNullable<DateTime>(reader, offset + 13),
         UpdatedAt = ReadNullable<DateTime>(reader, offset + 14),
         ApprovedBy = ReadNullable<Guid>(reader, offset + 15),
@@ -222,6 +260,11 @@ public sealed class PostgresDBService(NpgsqlDataSource dataSource) : IDBService
     private static void AddEditorScope(NpgsqlCommand command, Guid editor)
     {
         command.Parameters.AddWithValue("editor", editor);
-        command.Parameters.AddWithValue("draft", Itinerary.DraftStatus);
+        command.Parameters.AddWithValue("pending", Pending);
     }
+
+    private static ItineraryStatus ReadItineraryStatus(NpgsqlDataReader reader, int column) =>
+        Enum.Parse<ItineraryStatus>(reader.GetString(column), ignoreCase: true);
+
+    private static string ToDatabaseStatus(ItineraryStatus status) => status.ToString().ToLowerInvariant();
 }

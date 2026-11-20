@@ -1,12 +1,12 @@
 import { Component, computed, input, model, signal } from '@angular/core';
-import { FixedStop } from '../api/itineraries-api';
+import { CatalogStop, FixedStop } from '../api/itineraries-api';
 
 @Component({
   selector: 'app-stop-picker',
   templateUrl: './stop-picker.html',
 })
 export class StopPicker {
-  readonly catalog = input.required<FixedStop[]>();
+  readonly catalog = input.required<CatalogStop[]>();
   readonly selected = model.required<FixedStop[]>();
   readonly error = input<string | null>(null);
 
@@ -23,6 +23,9 @@ export class StopPicker {
         ),
     );
   });
+  protected readonly candidate = computed(() =>
+    this.available().find(({ id }) => id === this.choice()),
+  );
 
   protected search(value: string): void {
     this.query.set(value);
@@ -30,8 +33,8 @@ export class StopPicker {
   }
 
   protected add(): void {
-    const stop = this.available().find(({ id }) => id === this.choice());
-    if (!stop) return;
+    const stop = this.candidate();
+    if (!stop?.canAddToItinerary) return;
     this.selected.update((stops) => [...stops, stop]);
     this.choice.set('');
   }

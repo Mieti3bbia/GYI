@@ -13,7 +13,14 @@ import {
   Subject,
   switchMap,
 } from 'rxjs';
-import { Draft, DraftInput, DraftSummary, FixedStop, ItinerariesApi } from '../api/itineraries-api';
+import {
+  CatalogStop,
+  DraftInput,
+  FixedStop,
+  ItinerariesApi,
+  ItineraryDetail,
+  ItinerarySummary,
+} from '../api/itineraries-api';
 import { DemoSession } from '../auth/demo-session';
 import { StopPicker } from './stop-picker';
 
@@ -45,18 +52,19 @@ export class EditorDashboard {
     description: ['', requiredText],
     geographicArea: ['', requiredText],
   });
-  protected readonly drafts = signal<DraftSummary[]>([]);
+  protected readonly itineraries = signal<ItinerarySummary[]>([]);
   protected readonly loading = signal(false);
   protected readonly listError = signal(false);
   protected readonly creating = signal(false);
   protected readonly saving = signal(false);
   protected readonly saveError = signal(false);
-  protected readonly detail = signal<Draft | null>(null);
+  protected readonly detail = signal<ItineraryDetail | null>(null);
+  protected readonly confirmError = signal(false);
   protected readonly opening = signal(false);
   protected readonly detailError = signal<string | null>(null);
   protected readonly detailId = signal<string | null>(null);
   protected readonly dashboardLink = ['/editor', this.session.id];
-  protected readonly catalog = signal<FixedStop[]>([]);
+  protected readonly catalog = signal<CatalogStop[]>([]);
   protected readonly catalogLoading = signal(false);
   protected readonly catalogError = signal(false);
   protected readonly selectedStops = signal<FixedStop[]>([]);
@@ -73,11 +81,12 @@ export class EditorDashboard {
           this.creating.set(false);
           this.editingStops.set(false);
           this.stopsSaved.set(false);
+          this.confirmError.set(false);
           this.detail.set(null);
           this.detailError.set(null);
           if (id === null || id === this.session.id) {
             this.detailId.set(null);
-            this.loadDrafts();
+            this.loadItineraries();
             return EMPTY;
           }
 
@@ -91,7 +100,9 @@ export class EditorDashboard {
               return this.api.detail(id).pipe(
                 catchError((error: HttpErrorResponse) => {
                   this.detailError.set(
-                    error.status === 404 ? 'Bozza non trovata.' : 'Impossibile aprire la bozza.',
+                    error.status === 404
+                      ? 'Itinerario non trovato.'
+                      : 'Impossibile aprire l’itinerario.',
                   );
                   return EMPTY;
                 }),
@@ -110,7 +121,7 @@ export class EditorDashboard {
     this.catalogLoading.set(true);
     this.catalogError.set(false);
     this.api
-      .fixedStops()
+      .stops()
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.catalogLoading.set(false)),
@@ -121,7 +132,7 @@ export class EditorDashboard {
       });
   }
 
-  protected loadDrafts(): void {
+  protected loadItineraries(): void {
     if (this.loading()) return;
     this.loading.set(true);
     this.listError.set(false);
@@ -132,7 +143,7 @@ export class EditorDashboard {
         finalize(() => this.loading.set(false)),
       )
       .subscribe({
-        next: (drafts) => this.drafts.set(drafts),
+        next: (itineraries) => this.itineraries.set(itineraries),
         error: () => this.listError.set(true),
       });
   }
@@ -184,7 +195,7 @@ export class EditorDashboard {
     this.stopError.set(null);
   }
 
-  protected editStops(draft: Draft): void {
+  protected editStops(draft: ItineraryDetail): void {
     this.changeStops([...new Map(draft.stops.map((stop) => [stop.id, stop])).values()]);
     this.stopsSaved.set(false);
     this.saveError.set(false);
@@ -213,6 +224,28 @@ export class EditorDashboard {
         },
         error: (response: HttpErrorResponse) => {
           if (this.detailId() === id) this.saveError.set(!this.showStopError(response));
+        },
+      });
+  }
+
+  protected confirmItinerary(itinerary: ItineraryDetail): void {
+    if (this.saving() || this.editingStops() || itinerary.status !== 'pending') return;
+    this.confirmError.set(false);
+    this.stopsSaved.set(false);
+    this.saving.set(true);
+
+    this.api
+      .confirm(itinerary.id)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.saving.set(false)),
+      )
+      .subscribe({
+        next: () => {
+          if (this.detailId() === itinerary.id) this.reloadDetail.next();
+        },
+        error: () => {
+          if (this.detailId() === itinerary.id) this.confirmError.set(true);
         },
       });
   }

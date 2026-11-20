@@ -1,11 +1,19 @@
 using FYI.Managers.Database;
 using GYI.src.dataModels;
+using GYI.src.enumerations;
 using GYI.src.factories;
 
 namespace FYI.Application;
 
 public sealed class Coordinator(SecurityManager security, ItineraryFactory factory, DBManager database)
 {
+    public async Task<IReadOnlyList<Stop>> GetStopsAsync(CancellationToken ct)
+    {
+        security.AuthorizeEditor();
+        var stops = await database.GetStopsAsync(ct);
+        return stops.Select(factory.CreateNewStop).ToArray();
+    }
+
     public async Task<IReadOnlyList<Stop>> GetFixedStopsAsync(CancellationToken ct)
     {
         security.AuthorizeEditor();
@@ -13,8 +21,11 @@ public sealed class Coordinator(SecurityManager security, ItineraryFactory facto
         return stops.Select(factory.CreateNewStop).ToArray();
     }
 
-    public Task<IReadOnlyList<(Guid Id, string Title)>> GetDraftsAsync(CancellationToken ct) =>
-        database.GetDraftsAsync(security.AuthorizeEditor(), ct);
+    public Task<IReadOnlyList<(Guid Id, string Title, ItineraryStatus Status)>> GetItinerariesAsync(
+        CancellationToken ct) => database.GetItinerariesAsync(security.AuthorizeEditor(), ct);
+
+    public Task<bool> ConfirmItineraryAsync(Guid id, CancellationToken ct) =>
+        database.ConfirmItineraryAsync(security.AuthorizeEditor(), id, ct);
 
     public async Task<Itinerary?> RetrieveItineraryAsync(Guid id, CancellationToken ct)
     {

@@ -32,14 +32,14 @@ describe('App', () => {
     expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Accedi a GYI');
   });
 
-  it('opens an itinerary directly and displays the saved visit order', async () => {
+  it('shows the saved visit order and lets the editor confirm the proposal', async () => {
     const session = TestBed.inject(DemoSession);
     session.login('editor', 'editor');
     const itineraryId = '001dd95b-afde-41ec-b1db-701112bf34fa';
     const url = '/editor/' + itineraryId;
     const harness = await RouterTestingHarness.create(url);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/itineraries/' + itineraryId).flush({
+    const itinerary = {
       id: itineraryId,
       title: 'Percorso nelle Marche',
       theme: 'Arte',
@@ -50,7 +50,9 @@ describe('App', () => {
         { id: '1', name: 'Prima nel catalogo', municipality: null },
       ],
       segments: [],
-    });
+    };
+    const endpoint = '/api/itineraries/' + itineraryId;
+    http.expectOne(endpoint).flush({ ...itinerary, status: 'pending' });
     harness.detectChanges();
 
     expect(TestBed.inject(Router).url).toBe(url);
@@ -59,6 +61,23 @@ describe('App', () => {
       'Seconda nel catalogo',
       'Prima nel catalogo',
     ]);
+    const page = harness.routeNativeElement!;
+    expect(page.textContent).toContain('In attesa di conferma');
+    const findButton = (label: string) =>
+      Array.from(page.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === label,
+      );
+    findButton('Conferma itinerario')!.click();
+    http.expectOne({ method: 'PUT', url: endpoint + '/confirm' }).flush(null, {
+      status: 204,
+      statusText: 'No Content',
+    });
+    http.expectOne(endpoint).flush({ ...itinerary, status: 'confirmed' });
+    harness.detectChanges();
+
+    expect(page.textContent).toContain('Confermato');
+    expect(findButton('Conferma itinerario')).toBeUndefined();
+    expect(findButton('Modifica tappe')).toBeUndefined();
   });
 
   it.each([
@@ -85,11 +104,22 @@ describe('App', () => {
 
     click('Nuovo itinerario');
     const catalog = [
-      { id: '1', name: 'Museo', municipality: 'Ancona' },
-      { id: '2', name: 'Abbazia', municipality: 'Fiastra' },
-      { id: '3', name: 'Rocca', municipality: 'Urbino' },
+      { id: '1', name: 'Museo', municipality: 'Ancona', canAddToItinerary: true },
+      { id: '2', name: 'Abbazia', municipality: 'Fiastra', canAddToItinerary: true },
+      { id: '3', name: 'Rocca', municipality: 'Urbino', canAddToItinerary: true },
     ];
-    http.expectOne('/api/stops/fixed').flush(catalog);
+    http.expectOne({ method: 'GET', url: '/api/stops' }).flush([
+      ...catalog,
+      {
+        id: '4',
+        name: 'Parco',
+        municipality: null,
+        description: 'Proposta in attesa',
+        latitude: 43.5,
+        longitude: 13.5,
+        canAddToItinerary: false,
+      },
+    ]);
     harness.detectChanges();
 
     for (const id of ['title', 'theme', 'description', 'geographicArea']) {
@@ -98,6 +128,15 @@ describe('App', () => {
       field.dispatchEvent(new Event('input', { bubbles: true }));
     }
     const catalogMenu = page.querySelector<HTMLSelectElement>('#catalog-stop')!;
+    catalogMenu.value = '4';
+    catalogMenu.dispatchEvent(new Event('change', { bubbles: true }));
+    harness.detectChanges();
+    expect(page.textContent).toContain('Proposta in attesa');
+    expect(page.textContent).toContain('Latitudine 43.5, longitudine 13.5');
+    const addButton = Array.from(page.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Aggiungi tappa',
+    );
+    expect(addButton?.disabled).toBe(true);
     const addStop = (id: string) => {
       catalogMenu.value = id;
       catalogMenu.dispatchEvent(new Event('change', { bubbles: true }));
@@ -112,11 +151,15 @@ describe('App', () => {
       click('Rimuovi: Abbazia');
       click('Sposta prima: Rocca');
     }
-    click('Salva bozza');
+    click('Proponi itinerario');
 
     const create = http.expectOne({ method: 'POST', url: '/api/itineraries' });
     expect(create.request.body.stopIds).toEqual(expectedIds);
-    const itinerary = { id: '001dd95b-afde-41ec-b1db-701112bf34fa', title: 'Prova' };
+    const itinerary = {
+      id: '001dd95b-afde-41ec-b1db-701112bf34fa',
+      title: 'Prova',
+      status: 'pending',
+    };
     create.flush(itinerary, { status: 201, statusText: 'Created' });
     await harness.fixture.whenStable();
 

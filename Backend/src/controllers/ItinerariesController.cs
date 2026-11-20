@@ -1,5 +1,6 @@
 ﻿using FYI.Application;
 using GYI.src.dataModels;
+using GYI.src.enumerations;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 
@@ -10,7 +11,7 @@ namespace FYI.Controllers;
 public sealed class ItinerariesController(Coordinator coordinator) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<DraftSummary>> Create(CreateDraft input, CancellationToken ct)
+    public async Task<ActionResult<ItinerarySummary>> Create(CreateDraft input, CancellationToken ct)
     {
         ValidateField("title", input.Title);
         ValidateField("theme", input.Theme);
@@ -30,7 +31,8 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
                 ModelState.AddModelError("title", "Esiste già un itinerario con questo titolo.");
                 return ValidationProblem(statusCode: StatusCodes.Status409Conflict, modelStateDictionary: ModelState);
             }
-            return CreatedAtAction(nameof(Detail), new { id = itinerary.Id }, new DraftSummary(itinerary.Id, itinerary.Title));
+            return CreatedAtAction(nameof(Detail), new { id = itinerary.Id },
+                new ItinerarySummary(itinerary.Id, itinerary.Title, itinerary.Status));
         }
         catch (StopSelectionException exception)
         {
@@ -39,24 +41,28 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
     }
 
     [HttpGet("mine")]
-    public async Task<ActionResult<IReadOnlyList<DraftSummary>>> Mine(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<ItinerarySummary>>> Mine(CancellationToken ct)
     {
-        var drafts = await coordinator.GetDraftsAsync(ct);
-        return Ok(drafts.Select(draft => new DraftSummary(draft.Id, draft.Title)));
+        var itineraries = await coordinator.GetItinerariesAsync(ct);
+        return Ok(itineraries.Select(item => new ItinerarySummary(item.Id, item.Title, item.Status)));
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<DraftDetail>> Detail(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ItineraryDetail>> Detail(Guid id, CancellationToken ct)
     {
         var draft = await coordinator.RetrieveItineraryAsync(id, ct);
         if (draft is null)
         {
             return NotFound();
         }
-        return new DraftDetail(
+        return new ItineraryDetail(
             draft.Id, draft.Title, draft.Theme, draft.Description, draft.GeographicArea,
-            draft.Stops, draft.GetSegments());
+            draft.Status, draft.Stops, draft.GetSegments());
     }
+
+    [HttpPut("{id:guid}/confirm")]
+    public async Task<IActionResult> Confirm(Guid id, CancellationToken ct) =>
+        await coordinator.ConfirmItineraryAsync(id, ct) ? NoContent() : NotFound();
 
     [HttpPut("{id:guid}/stops")]
     public async Task<IActionResult> UpdateStops(Guid id, UpdateDraftStops input, CancellationToken ct)
@@ -92,7 +98,7 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
 
 public sealed record CreateDraft(string? Title, string? Theme, string? Description, string? GeographicArea, Guid[]? StopIds);
 public sealed record UpdateDraftStops([Required] Guid[] StopIds);
-public sealed record DraftSummary(Guid Id, string Title);
-public sealed record DraftDetail(
+public sealed record ItinerarySummary(Guid Id, string Title, ItineraryStatus Status);
+public sealed record ItineraryDetail(
     Guid Id, string Title, string? Theme, string Description, string? GeographicArea,
-    IReadOnlyList<Stop> Stops, IReadOnlyList<Segment> Segments);
+    ItineraryStatus Status, IReadOnlyList<Stop> Stops, IReadOnlyList<Segment> Segments);
