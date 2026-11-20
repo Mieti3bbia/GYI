@@ -23,6 +23,8 @@ export interface FixedStop {
   description: string;
   latitude: number;
   longitude: number;
+  cap: string | null;
+  price: number;
   municipality: string | null;
   province: string | null;
   sourceUrl: string | null;
@@ -30,6 +32,21 @@ export interface FixedStop {
 
 export interface CatalogStop extends FixedStop {
   canAddToItinerary: boolean;
+}
+
+export type StopPosition = Pick<FixedStop, 'name' | 'description' | 'latitude' | 'longitude'>;
+
+export interface StopDetails extends StopPosition {
+  cap: string;
+  price: number;
+  municipality: string;
+  province: string;
+  sourceUrl: string | null;
+}
+
+export interface DraftStopChange {
+  stopId?: string | null;
+  details?: StopDetails;
 }
 
 export interface Segment {
@@ -44,7 +61,11 @@ export interface ItineraryDetail extends ItinerarySummary {
   geographicArea: string | null;
   stops: FixedStop[];
   segments: Segment[];
+  acceptsEconomicStops: boolean;
+  averageTripPrice: number | null;
 }
+
+export type ParticipationInput = Pick<ItineraryDetail, 'acceptsEconomicStops' | 'averageTripPrice'>;
 
 @Injectable({ providedIn: 'root' })
 export class ItinerariesApi {
@@ -59,19 +80,35 @@ export class ItinerariesApi {
     return this.http.get<ItineraryDetail>(`${this.path}/${id}`);
   }
 
+  publicItineraries(): Observable<ItinerarySummary[]> {
+    return this.http.get<ItinerarySummary[]>(`${this.path}/public`);
+  }
+
+  publicDetail(id: string): Observable<ItineraryDetail> {
+    return this.http.get<ItineraryDetail>(`${this.path}/public/${id}`);
+  }
+
   stops(): Observable<CatalogStop[]> {
     return this.http.get<CatalogStop[]>('/api/stops');
   }
 
-  create(input: DraftInput & { stopIds: string[] }): Observable<ItinerarySummary> {
+  createStop(details: StopDetails): Observable<CatalogStop> {
+    return this.http.post<CatalogStop>('/api/stops', details);
+  }
+
+  create(input: DraftInput & { stops: DraftStopChange[] }): Observable<ItinerarySummary> {
     return this.http.post<ItinerarySummary>(this.path, input);
   }
 
-  updateStops(id: string, stopIds: string[]): Observable<void> {
-    return this.http.put<void>(`${this.path}/${id}/stops`, { stopIds });
+  update(id: string, input: DraftInput & { stops: DraftStopChange[] }): Observable<void> {
+    return this.http.put<void>(`${this.path}/${id}`, input);
   }
 
   confirm(id: string): Observable<void> {
     return this.http.put<void>(`${this.path}/${id}/confirm`, null);
+  }
+
+  updateParticipation(id: string, input: ParticipationInput): Observable<void> {
+    return this.http.put<void>(`${this.path}/${id}/participation`, input);
   }
 }

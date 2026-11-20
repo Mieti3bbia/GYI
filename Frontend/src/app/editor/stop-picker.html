@@ -8,22 +8,37 @@
     <label for="stop-search">Cerca per nome, comune o provincia</label>
     <input id="stop-search" type="search" #searchInput (input)="search(searchInput.value)" />
   </div>
+  @if (editing()) {
+    <app-stop-form
+      [initial]="editingStop()"
+      (submitted)="apply($event)"
+      (cancelled)="editing.set(false)"
+    />
+  } @else {
+    <div><button type="button" class="secondary" (click)="edit(null)">Nuova tappa</button></div>
+  }
   <div class="field">
     <label for="catalog-stop">Scegli una tappa</label>
     <select
       id="catalog-stop"
       #stopSelect
       [value]="choice()"
+      [disabled]="loading()"
       (change)="choice.set(stopSelect.value)"
     >
       <option value="">
-        {{ available().length ? 'Seleziona una tappa' : 'Nessuna tappa disponibile' }}
+        {{
+          loading()
+            ? 'Caricamento…'
+            : available().length
+              ? 'Seleziona una tappa'
+              : 'Nessuna tappa disponibile'
+        }}
       </option>
       @for (stop of available(); track stop.id) {
         <option [value]="stop.id">
-          {{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}{{
-            stop.province ? ' · ' + stop.province : ''
-          }}
+          {{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : ''
+          }}{{ stop.province ? ' · ' + stop.province : '' }}
         </option>
       }
     </select>
@@ -37,7 +52,7 @@
     <button
       type="button"
       class="secondary"
-      [disabled]="!candidate()?.canAddToItinerary"
+      [disabled]="editing() || !candidate()?.canAddToItinerary"
       (click)="add()"
     >
       Aggiungi tappa
@@ -58,7 +73,7 @@
             <button
               type="button"
               class="secondary"
-              [disabled]="first"
+              [disabled]="first || editing()"
               [attr.aria-label]="'Sposta prima: ' + stop.name"
               (click)="move(index, -1)"
             >
@@ -67,7 +82,7 @@
             <button
               type="button"
               class="secondary"
-              [disabled]="last"
+              [disabled]="last || editing()"
               [attr.aria-label]="'Sposta dopo: ' + stop.name"
               (click)="move(index, 1)"
             >
@@ -76,6 +91,16 @@
             <button
               type="button"
               class="secondary"
+              [disabled]="editing()"
+              [attr.aria-label]="'Modifica tappa: ' + stop.name"
+              (click)="edit(index)"
+            >
+              Modifica
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="editing()"
               [attr.aria-label]="'Rimuovi: ' + stop.name"
               (click)="remove(index)"
             >

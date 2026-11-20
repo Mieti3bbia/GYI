@@ -2,21 +2,25 @@
 using GYI.src.dataModels;
 using GYI.src.enumerations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using FYI.Managers.Database;
 using System.ComponentModel.DataAnnotations;
 
 namespace FYI.Controllers;
 
 [ApiController]
+[Authorize(Roles = SecurityManager.EditorRole)]
 [Route("api/itineraries")]
 public sealed class ItinerariesController(Coordinator coordinator) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<ItinerarySummary>> Create(CreateDraft input, CancellationToken ct)
     {
-        ValidateField("title", input.Title);
-        ValidateField("theme", input.Theme);
-        ValidateField("description", input.Description);
-        ValidateField("geographicArea", input.GeographicArea);
+        ValidateItinerary(input.Title, input.Theme, input.Description, input.GeographicArea);
+        if (input.Stops is not null && input.StopIds is not null)
+            ModelState.AddModelError("stops", "Invia una sola selezione di tappe.");
+        var stops = input.Stops ?? (input.StopIds ?? []).Select(id => new DraftStopChange(id, null)).ToArray();
+        ValidateSelection(stops);
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
@@ -25,11 +29,10 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
         try
         {
             var itinerary = await coordinator.CreateItineraryAsync(
-                input.Title!, input.Theme!, input.Description!, input.GeographicArea!, input.StopIds, ct);
+                ToChanges(input.Title, input.Theme, input.Description, input.GeographicArea, stops), ct);
             if (itinerary is null)
             {
-                ModelState.AddModelError("title", "Esiste già un itinerario con questo titolo.");
-                return ValidationProblem(statusCode: StatusCodes.Status409Conflict, modelStateDictionary: ModelState);
+                return TitleConflict();
             }
             return CreatedAtAction(nameof(Detail), new { id = itinerary.Id },
                 new ItinerarySummary(itinerary.Id, itinerary.Title, itinerary.Status));
@@ -48,21 +51,72 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ItineraryDetail>> Detail(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ItineraryDetail>> Detail(Guid id, CancellationToken ct) =>
+        ItineraryResponse(await coordinator.RetrieveItineraryAsync(id, ct));
+
+    [AllowAnonymous]
+    [HttpGet("public")]
+    public async Task<ActionResult<IReadOnlyList<ItinerarySummary>>> Public(CancellationToken ct)
     {
-        var draft = await coordinator.RetrieveItineraryAsync(id, ct);
-        if (draft is null)
+        var itineraries = await coordinator.GetPublicItinerariesAsync(ct);
+        return Ok(itineraries.Select(item => new ItinerarySummary(item.Id, item.Title, item.Status)));
+    }
+
+    [AllowAnonymous]
+    [HttpGet("public/{id:guid}")]
+    public async Task<ActionResult<ItineraryDetail>> PublicDetail(Guid id, CancellationToken ct) =>
+        ItineraryResponse(await coordinator.RetrievePublicItineraryAsync(id, ct));
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, UpdateDraft input, CancellationToken ct)
+    {
+        ValidateItinerary(input.Title, input.Theme, input.Description, input.GeographicArea);
+        ValidateSelection(input.Stops);
+        if (!ModelState.IsValid)
         {
-            return NotFound();
+            return ValidationProblem(ModelState);
         }
-        return new ItineraryDetail(
-            draft.Id, draft.Title, draft.Theme, draft.Description, draft.GeographicArea,
-            draft.Status, draft.Stops, draft.GetSegments());
+
+        try
+        {
+            var changes = ToChanges(input.Title, input.Theme, input.Description, input.GeographicArea, input.Stops);
+            return await coordinator.UpdateItineraryAsync(id, changes, ct) switch
+            {
+                ItineraryWriteResult.Saved => NoContent(),
+                ItineraryWriteResult.TitleConflict => TitleConflict(),
+                _ => NotFound()
+            };
+        }
+        catch (StopSelectionException exception)
+        {
+            return InvalidStops(exception);
+        }
     }
 
     [HttpPut("{id:guid}/confirm")]
     public async Task<IActionResult> Confirm(Guid id, CancellationToken ct) =>
-        await coordinator.ConfirmItineraryAsync(id, ct) ? NoContent() : NotFound();
+        await coordinator.ConfirmItineraryAsync(id, ct) switch
+        {
+            ItineraryWriteResult.Saved => NoContent(),
+            ItineraryWriteResult.IncompleteItinerary or ItineraryWriteResult.UnavailableStops =>
+                Problem(statusCode: StatusCodes.Status409Conflict,
+                    detail: "Per pubblicare servono titolo, tema, descrizione e almeno due tappe fisse valide e distinte."),
+            _ => NotFound()
+        };
+
+    [HttpPut("{id:guid}/participation")]
+    public async Task<IActionResult> UpdateParticipation(Guid id, ParticipationInput input, CancellationToken ct)
+    {
+        var accepts = input.AcceptsEconomicStops!.Value;
+        var price = accepts ? input.AverageTripPrice : null;
+        if (accepts && (price is null || price < 0 || price > 9999999.99m || Math.Round(price.Value, 2) != price.Value))
+        {
+            ModelState.AddModelError("averageTripPrice", "Inserisci un prezzo in euro tra 0 e 9.999.999,99 con al massimo due decimali.");
+            return ValidationProblem(ModelState);
+        }
+
+        return await coordinator.UpdateParticipationAsync(id, accepts, price, ct) ? NoContent() : NotFound();
+    }
 
     [HttpPut("{id:guid}/stops")]
     public async Task<IActionResult> UpdateStops(Guid id, UpdateDraftStops input, CancellationToken ct)
@@ -83,22 +137,53 @@ public sealed class ItinerariesController(Coordinator coordinator) : ControllerB
         return ValidationProblem(ModelState);
     }
 
-    private void ValidateField(string field, string? value)
+    private ActionResult<ItineraryDetail> ItineraryResponse(Itinerary? itinerary) =>
+        itinerary is null
+            ? NotFound()
+            : new ItineraryDetail(
+                itinerary.Id, itinerary.Title, itinerary.Theme, itinerary.Description, itinerary.GeographicArea,
+                itinerary.Status, itinerary.Stops, itinerary.GetSegments(), itinerary.AcceptsEconomicStops,
+                itinerary.AverageTripPrice);
+
+    private ActionResult TitleConflict()
     {
-        if (string.IsNullOrWhiteSpace(value))
+        ModelState.AddModelError("title", "Esiste già un itinerario con questo titolo.");
+        return ValidationProblem(statusCode: StatusCodes.Status409Conflict, modelStateDictionary: ModelState);
+    }
+
+    private void ValidateItinerary(string? title, string? theme, string? description, string? geographicArea)
+    {
+        StopInputValidation.ValidateText(ModelState, "title", title);
+        StopInputValidation.ValidateText(ModelState, "theme", theme);
+        StopInputValidation.ValidateText(ModelState, "description", description);
+        StopInputValidation.ValidateText(ModelState, "geographicArea", geographicArea);
+    }
+
+    private void ValidateSelection(DraftStopChange?[] stops)
+    {
+        for (var index = 0; index < stops.Length; index++)
         {
-            ModelState.AddModelError(field, "Campo obbligatorio.");
-        }
-        else if (value.Contains('\0'))
-        {
-            ModelState.AddModelError(field, "Il campo contiene un carattere non valido.");
+            var stop = stops[index];
+            var field = $"stops[{index}]";
+            if (stop is null || (stop.StopId is null && stop.Details is null))
+                ModelState.AddModelError(field, "Seleziona una tappa o inserisci i suoi dati.");
+            else if (stop.Details is { } details)
+                StopInputValidation.Validate(ModelState, details, field + ".");
         }
     }
+
+    private static DraftChanges ToChanges(string? title, string? theme, string? description, string? area,
+        DraftStopChange?[] stops) => new(title!, theme!, description!, area!, stops.Select(stop => stop!).ToArray());
 }
 
-public sealed record CreateDraft(string? Title, string? Theme, string? Description, string? GeographicArea, Guid[]? StopIds);
+public sealed record CreateDraft(string? Title, string? Theme, string? Description, string? GeographicArea,
+    Guid[]? StopIds, DraftStopChange?[]? Stops);
+public sealed record UpdateDraft(string? Title, string? Theme, string? Description, string? GeographicArea,
+    [Required] DraftStopChange?[] Stops);
 public sealed record UpdateDraftStops([Required] Guid[] StopIds);
+public sealed record ParticipationInput([Required] bool? AcceptsEconomicStops, decimal? AverageTripPrice);
 public sealed record ItinerarySummary(Guid Id, string Title, ItineraryStatus Status);
 public sealed record ItineraryDetail(
     Guid Id, string Title, string? Theme, string Description, string? GeographicArea,
-    ItineraryStatus Status, IReadOnlyList<Stop> Stops, IReadOnlyList<Segment> Segments);
+    ItineraryStatus Status, IReadOnlyList<Stop> Stops, IReadOnlyList<Segment> Segments,
+    bool AcceptsEconomicStops, decimal? AverageTripPrice);

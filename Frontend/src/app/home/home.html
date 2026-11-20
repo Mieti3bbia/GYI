@@ -2,11 +2,11 @@
   <header class="site-header">
     <div class="site-width header-content">
       <a class="wordmark" href="/home" aria-label="GYI, pagina iniziale">
-        <span class="brand-mark" aria-hidden="true">↝</span>
+        <img class="brand-mark" src="gyi-mark.png" width="32" height="32" alt="" />
         <span>GYI.</span>
       </a>
       <button class="editor-access" type="button" (click)="loginDialog.showModal()">
-        Area editor <span aria-hidden="true">↗</span>
+        Login <span aria-hidden="true">↗</span>
       </button>
     </div>
   </header>
@@ -71,6 +71,12 @@
                 <h3>{{ detail.title }}</h3>
                 @if (detail.description) {
                   <p class="itinerary-description">{{ detail.description }}</p>
+                }
+                @if (detail.acceptsEconomicStops && detail.averageTripPrice !== null) {
+                  <p class="itinerary-description">
+                    Prezzo medio stimato
+                    <strong>{{ euros.format(detail.averageTripPrice) }} a persona</strong>
+                  </p>
                 }
                 @if (detail.stops.length) {
                   <ol class="stops" aria-label="Tappe in ordine di visita">
@@ -140,6 +146,6 @@
     @if (failed()) {
       <p class="error" role="alert">Nome utente o password non validi.</p>
     }
-    <button type="submit">Accedi</button>
+    <button type="submit" [disabled]="signingIn()">Accedi</button>
   </form>
 </dialog>

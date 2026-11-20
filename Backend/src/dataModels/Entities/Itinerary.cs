@@ -11,6 +11,8 @@ public sealed class Itinerary
     public string? GeographicArea { get; set; }
     public required ItineraryStatus Status { get; set; }
     public bool IsCustomizable { get; set; }
+    public bool AcceptsEconomicStops { get; set; }
+    public decimal? AverageTripPrice { get; set; }
     public Guid? CreatedBy { get; set; }
     public Guid? UpdatedBy { get; set; }
     public DateTime? CreatedAt { get; set; }

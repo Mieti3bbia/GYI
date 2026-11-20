@@ -6,7 +6,7 @@ app-route-map {
 .route-map {
   position: relative;
   height: 100%;
-  min-height: 30rem;
+  min-height: var(--route-map-min-height, 30rem);
   isolation: isolate;
   background: #e5ebe1;
 }
@@ -106,6 +106,6 @@ app-route-map {
 
 @media (max-width: 720px) {
   .route-map {
-    min-height: 25rem;
+    min-height: var(--route-map-min-height, 25rem);
   }
 }

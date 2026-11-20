@@ -44,14 +44,7 @@
 }
 
 .brand-mark {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border-radius: 0.65rem;
-  color: #efcc78;
-  background: #204b3a;
-  letter-spacing: 0;
+  display: block;
 }
 
 .editor-access,

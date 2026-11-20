@@ -1,0 +1,100 @@
+<fieldset class="manual-stop" [formGroup]="form" [disabled]="busy()">
+  <div class="field">
+    <label for="stop-name">Nome della tappa</label>
+    <input id="stop-name" formControlName="name" required />
+    @if (form.controls.name.touched && form.controls.name.invalid) {
+      <p class="error" role="alert">Inserisci il nome della tappa.</p>
+    }
+  </div>
+  <div class="locality">
+    <div class="field">
+      <label for="stop-cap">CAP</label>
+      <input id="stop-cap" formControlName="cap" inputmode="numeric" maxlength="5" required />
+      @if (form.controls.cap.touched && form.controls.cap.invalid) {
+        <p class="error" role="alert">Inserisci un CAP di cinque cifre.</p>
+      }
+    </div>
+    <div class="field">
+      <label for="stop-municipality">Comune</label>
+      <input id="stop-municipality" formControlName="municipality" required />
+      @if (form.controls.municipality.touched && form.controls.municipality.invalid) {
+        <p class="error" role="alert">Inserisci il comune.</p>
+      }
+    </div>
+    <div class="field">
+      <label for="stop-province">Provincia</label>
+      <input id="stop-province" formControlName="province" required />
+      @if (form.controls.province.touched && form.controls.province.invalid) {
+        <p class="error" role="alert">Inserisci la provincia.</p>
+      }
+    </div>
+  </div>
+  <div class="field">
+    <label for="stop-description">Descrizione della tappa</label>
+    <textarea id="stop-description" formControlName="description" rows="3" required></textarea>
+    @if (form.controls.description.touched && form.controls.description.invalid) {
+      <p class="error" role="alert">Inserisci la descrizione della tappa.</p>
+    }
+  </div>
+  <div class="field">
+    <label for="stop-price">Prezzo (€ a persona)</label>
+    <input
+      id="stop-price"
+      formControlName="price"
+      type="number"
+      min="0"
+      step="0.01"
+      required
+      aria-describedby="stop-price-help"
+    />
+    <p class="helper" id="stop-price-help">Inserisci 0 se la tappa è gratuita.</p>
+    @if (form.controls.price.touched && form.controls.price.invalid) {
+      <p class="error" role="alert">
+        Inserisci un prezzo non negativo con al massimo due decimali.
+      </p>
+    }
+  </div>
+  <div class="field">
+    <label for="stop-source-url">URL della fonte (facoltativo)</label>
+    <input id="stop-source-url" formControlName="sourceUrl" type="url" inputmode="url" />
+    @if (form.controls.sourceUrl.touched && form.controls.sourceUrl.invalid) {
+      <p class="error" role="alert">Inserisci un URL completo che inizi con http:// o https://.</p>
+    }
+  </div>
+  <div class="coordinates">
+    <div class="field">
+      <label for="stop-latitude">Latitudine</label>
+      <input
+        id="stop-latitude"
+        formControlName="latitude"
+        type="number"
+        step="any"
+        min="-90"
+        max="90"
+        required
+      />
+      @if (form.controls.latitude.touched && form.controls.latitude.invalid) {
+        <p class="error" role="alert">Inserisci un valore da −90 a 90.</p>
+      }
+    </div>
+    <div class="field">
+      <label for="stop-longitude">Longitudine</label>
+      <input
+        id="stop-longitude"
+        formControlName="longitude"
+        type="number"
+        step="any"
+        min="-180"
+        max="180"
+        required
+      />
+      @if (form.controls.longitude.touched && form.controls.longitude.invalid) {
+        <p class="error" role="alert">Inserisci un valore da −180 a 180.</p>
+      }
+    </div>
+  </div>
+  <div class="actions">
+    <button type="button" (click)="submit()">{{ busy() ? 'Salvataggio…' : submitLabel() }}</button>
+    <button type="button" class="secondary" (click)="cancelled.emit()">Annulla tappa</button>
+  </div>
+</fieldset>

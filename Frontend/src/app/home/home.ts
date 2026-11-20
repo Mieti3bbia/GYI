@@ -10,7 +10,7 @@ import {
   ItinerarySummary,
 } from '../api/itineraries-api';
 import { DemoSession } from '../auth/demo-session';
-import { RouteMap } from './route-map';
+import { RouteMap } from '../map/route-map';
 
 @Component({
   imports: [ReactiveFormsModule, RouteMap],
@@ -26,6 +26,7 @@ export class Home {
 
   protected readonly form = inject(NonNullableFormBuilder).group({ username: '', password: '' });
   protected readonly failed = signal(false);
+  protected readonly signingIn = signal(false);
   protected readonly itineraries = signal<ItinerarySummary[]>([]);
   protected readonly itinerary = signal<ItineraryDetail | null>(null);
   protected readonly selectedId = signal('');
@@ -35,11 +36,12 @@ export class Home {
   protected readonly loadingDetail = signal(false);
   protected readonly detailError = signal(false);
   protected readonly emptyStops: readonly FixedStop[] = [];
+  protected readonly euros = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
 
   constructor() {
     this.detailRequests
       .pipe(
-        switchMap((id) => this.api.detail(id).pipe(catchError(() => of(null)))),
+        switchMap((id) => this.api.publicDetail(id).pipe(catchError(() => of(null)))),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((detail) => {
@@ -57,7 +59,7 @@ export class Home {
     this.loadingCatalog.set(true);
     this.catalogError.set(false);
     this.api
-      .mine()
+      .publicItineraries()
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.loadingCatalog.set(false)),
@@ -83,11 +85,19 @@ export class Home {
   }
 
   protected login(): void {
+    if (this.signingIn()) return;
     const { username, password } = this.form.getRawValue();
-    const authenticated = this.session.login(username, password);
-    this.failed.set(!authenticated);
-    if (authenticated) {
-      void this.router.navigate(['/editor', this.session.id]);
-    }
+    this.failed.set(false);
+    this.signingIn.set(true);
+    this.session
+      .login(username, password)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.signingIn.set(false)),
+      )
+      .subscribe({
+        next: ({ id }) => void this.router.navigate(['/editor', id]),
+        error: () => this.failed.set(true),
+      });
   }
 }

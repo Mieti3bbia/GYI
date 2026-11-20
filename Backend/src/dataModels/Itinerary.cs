@@ -19,6 +19,8 @@ public sealed class Itinerary : IDataModel
     public string Description => Metadata.Description;
     public string? GeographicArea => Metadata.GeographicArea;
     public ItineraryStatus Status => Metadata.Status;
+    public bool AcceptsEconomicStops => Metadata.AcceptsEconomicStops;
+    public decimal? AverageTripPrice => Metadata.AverageTripPrice;
     public IReadOnlyList<Stop> Stops { get; }
 
     public IReadOnlyList<Segment> GetSegments() =>

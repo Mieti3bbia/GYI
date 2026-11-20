@@ -303,4 +303,4 @@ SELECT id::uuid, name, description, 'Accepted', cap, 0, longitude, latitude, @ed
        CURRENT_TIMESTAMP AT TIME ZONE 'UTC', @editor, CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
        true, municipality, province, source_url
 FROM places
-ON CONFLICT (source_url) DO NOTHING;
+ON CONFLICT (source_url) WHERE draft_itinerary_id IS NULL DO NOTHING;

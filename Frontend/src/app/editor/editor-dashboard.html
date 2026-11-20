@@ -1,199 +1,320 @@
-<main class="shell dashboard">
-  <header class="row">
-    <h1>{{ detailId() ? 'Dettaglio itinerario' : 'I miei itinerari' }}</h1>
-    <button type="button" class="secondary" (click)="logout()">Esci</button>
+<div class="workspace">
+  <header class="workspace-header">
+    <div class="editor-width row">
+      <a class="editor-brand" routerLink="/home" aria-label="GYI, torna alla home">
+        <img src="gyi-mark.png" width="32" height="32" alt="" />
+        <span>GYI.</span> Area editor
+      </a>
+      <button type="button" class="secondary" (click)="logout()">Esci</button>
+    </div>
   </header>
 
-  @if (detailId()) {
-    <button type="button" class="secondary" [routerLink]="dashboardLink">
-      Torna agli itinerari
-    </button>
-  } @else if (!creating()) {
-    <button type="button" [disabled]="loading() || saving()" (click)="newDraft()">
-      Nuovo itinerario
-    </button>
-  }
-  @if (stopsSaved()) {
-    <p class="success" role="status">Tappe aggiornate.</p>
-  }
-  @if ((creating() || editingStops()) && catalogLoading()) {
-    <p role="status">Caricamento del catalogo delle tappe…</p>
-  }
-  @if ((creating() || editingStops()) && catalogError()) {
-    <div class="panel">
-      <p class="error" role="alert">Impossibile caricare il catalogo delle tappe.</p>
-      <button type="button" class="secondary" (click)="loadCatalog()">Ricarica catalogo</button>
+  <main class="editor-width editor-main">
+    @if (detailId()) {
+      <a class="back-link" [routerLink]="dashboardLink">← Tutti gli itinerari</a>
+    }
+    <div class="page-heading row">
+      <h1>
+        @if (editing()) {
+          Modifica itinerario
+        } @else if (creating()) {
+          Inserisci itinerario
+        } @else if (insertingStop()) {
+          Inserisci tappa
+        } @else {
+          {{ detail()?.title ?? (detailId() ? 'Dettaglio itinerario' : 'I miei itinerari') }}
+        }
+      </h1>
     </div>
-  }
-  @if (creating()) {
-    <section class="panel" aria-labelledby="new-draft-title">
-      <h2 id="new-draft-title">Nuovo itinerario</h2>
-      <form [formGroup]="form" (ngSubmit)="save()">
-        <fieldset [disabled]="saving()">
-          @for (field of fields; track field.key) {
-            @let error = fieldError(field.key);
-            <div class="field">
-              <label [for]="field.key">{{ field.label }}</label>
-              @if (field.key === 'description') {
-                <textarea
-                  [id]="field.key"
-                  [formControlName]="field.key"
-                  rows="4"
-                  required
-                  [attr.aria-invalid]="error ? 'true' : null"
-                  [attr.aria-describedby]="error ? field.key + '-error' : null"
-                ></textarea>
-              } @else {
-                <input
-                  [id]="field.key"
-                  [formControlName]="field.key"
-                  required
-                  [attr.aria-invalid]="error ? 'true' : null"
-                  [attr.aria-describedby]="error ? field.key + '-error' : null"
-                />
-              }
-              @if (error) {
-                <p class="error" [id]="field.key + '-error'" role="alert">{{ error }}</p>
-              }
-            </div>
-          }
-          @if (!catalogLoading() && !catalogError()) {
-            <app-stop-picker
-              [catalog]="catalog()"
-              [selected]="selectedStops()"
-              (selectedChange)="changeStops($event)"
-              [error]="stopError()"
-            />
-          }
-          @if (saveError()) {
-            <p class="error" role="alert">Impossibile proporre l’itinerario. Riprova.</p>
-          }
-          <div class="actions">
-            <button type="submit" [disabled]="loading() || catalogLoading()">
-              {{ saving() ? 'Salvataggio…' : 'Proponi itinerario' }}
-            </button>
-            <button type="button" class="secondary" (click)="creating.set(false)">Annulla</button>
-          </div>
-        </fieldset>
-      </form>
-    </section>
-  }
-
-  @if (!detailId()) {
-    <section class="panel" aria-labelledby="itineraries-title">
-      <h2 id="itineraries-title">Itinerari</h2>
-      @if (loading()) {
-        <p role="status">Caricamento degli itinerari…</p>
-      }
-      @if (listError()) {
-        <p class="error" role="alert">Impossibile caricare gli itinerari.</p>
+    @if (!detailId()) {
+      <nav class="editor-tabs actions" aria-label="Operazioni editor">
         <button
           type="button"
           class="secondary"
-          [disabled]="loading() || saving()"
-          (click)="loadItineraries()"
+          [attr.aria-pressed]="!creating() && !insertingStop()"
+          [disabled]="saving()"
+          (click)="showItineraries()"
         >
-          Riprova
+          I miei itinerari
         </button>
-      } @else if (!loading() && itineraries().length === 0) {
-        <p>Non hai ancora itinerari.</p>
-      }
-      @if (itineraries().length > 0) {
-        <ul class="drafts">
-          @for (itinerary of itineraries(); track itinerary.id) {
-            <li class="row">
-              <div>
-                <strong>{{ itinerary.title }}</strong>
-                <p>
-                  {{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}
-                </p>
+        <button
+          type="button"
+          class="secondary"
+          [attr.aria-pressed]="creating()"
+          [disabled]="saving() || creating()"
+          (click)="newDraft()"
+        >
+          Inserisci itinerario
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          [attr.aria-pressed]="insertingStop()"
+          [disabled]="saving() || insertingStop()"
+          (click)="showCatalogStopForm()"
+        >
+          Inserisci tappa
+        </button>
+      </nav>
+    }
+    @if (logoutError()) {
+      <p class="error" role="alert">Impossibile terminare la sessione. Riprova.</p>
+    }
+    @if (saved()) {
+      <p class="success" role="status">Modifiche salvate.</p>
+    }
+
+    @if (insertingStop()) {
+      <div class="editor-layout editing-layout">
+        <section class="panel" aria-labelledby="catalog-stop-title">
+          <h2 id="catalog-stop-title">Tappa di catalogo</h2>
+          @if (catalogStopSaved(); as stop) {
+            <p class="success" role="status">
+              {{ stop.name }} è disponibile nel catalogo delle tappe.
+            </p>
+            <div>
+              <button type="button" (click)="showCatalogStopForm()">
+                Inserisci un’altra tappa
+              </button>
+            </div>
+          } @else {
+            <app-stop-form
+              submitLabel="Salva tappa"
+              [busy]="saving()"
+              (preview)="previewCatalogStop($event)"
+              (submitted)="saveCatalogStop($event)"
+              (cancelled)="showItineraries()"
+            />
+            @if (catalogStopError(); as error) {
+              <p class="error" role="alert">{{ error }}</p>
+            }
+          }
+        </section>
+        <section class="map-card" aria-labelledby="position-title">
+          <header><h2 id="position-title">Posizione della tappa</h2></header>
+          <app-route-map
+            [stops]="catalogStopPreview()"
+            [area]="catalogStopPreview()[0]?.name || 'Italia'"
+          />
+        </section>
+      </div>
+    } @else if (creating() || editing()) {
+      <div class="editor-layout editing-layout">
+        <section class="panel" aria-labelledby="edit-fields">
+          <h2 id="edit-fields">Dati e tappe</h2>
+          <form [formGroup]="form" (ngSubmit)="save()">
+            <fieldset [disabled]="saving()">
+              @for (field of fields; track field.key) {
+                @let error = fieldError(field.key);
+                <div class="field">
+                  <label [for]="field.key">{{ field.label }}</label>
+                  @if (field.key === 'description') {
+                    <textarea
+                      [id]="field.key"
+                      [formControlName]="field.key"
+                      rows="4"
+                      required
+                      [attr.aria-invalid]="error ? 'true' : null"
+                      [attr.aria-describedby]="error ? field.key + '-error' : null"
+                    ></textarea>
+                  } @else {
+                    <input
+                      [id]="field.key"
+                      [formControlName]="field.key"
+                      required
+                      [attr.aria-invalid]="error ? 'true' : null"
+                      [attr.aria-describedby]="error ? field.key + '-error' : null"
+                    />
+                  }
+                  @if (error) {
+                    <p class="error" [id]="field.key + '-error'" role="alert">{{ error }}</p>
+                  }
+                </div>
+              }
+              @if (catalogLoading()) {
+                <p role="status">Caricamento del catalogo delle tappe…</p>
+              }
+              @if (catalogError()) {
+                <div class="actions">
+                  <p class="error" role="alert">Impossibile caricare il catalogo.</p>
+                  <button type="button" class="secondary" (click)="loadCatalog()">Riprova</button>
+                </div>
+              }
+              <app-stop-picker
+                [catalog]="catalog()"
+                [loading]="catalogLoading()"
+                [selected]="selectedStops()"
+                (selectedChange)="changeStops($event)"
+                [editing]="stopFormOpen()"
+                (editingChange)="stopFormOpen.set($event)"
+                [error]="stopError()"
+              />
+              @if (saveError(); as error) {
+                <p class="error" role="alert">{{ error }}</p>
+              }
+              <div class="actions">
+                <button type="submit" [disabled]="stopFormOpen()">
+                  {{
+                    saving() ? 'Salvataggio…' : editing() ? 'Salva modifiche' : 'Proponi itinerario'
+                  }}
+                </button>
+                <button type="button" class="secondary" (click)="cancelEdit()">Annulla</button>
               </div>
+            </fieldset>
+          </form>
+        </section>
+        <section class="map-card" aria-labelledby="preview-title">
+          <header class="row">
+            <h2 id="preview-title">Anteprima del percorso</h2>
+            <span
+              >{{ selectedStops().length }}
+              {{ selectedStops().length === 1 ? 'tappa' : 'tappe' }}</span
+            >
+          </header>
+          <app-route-map
+            [stops]="selectedStops()"
+            [area]="form.controls.geographicArea.value || 'Italia'"
+          />
+        </section>
+      </div>
+    } @else if (!detailId()) {
+      <section class="panel" aria-labelledby="itineraries-title">
+        <h2 id="itineraries-title">Itinerari</h2>
+        @if (loading()) {
+          <p role="status">Caricamento degli itinerari…</p>
+        } @else if (listError()) {
+          <p class="error" role="alert">Impossibile caricare gli itinerari.</p>
+          <div>
+            <button type="button" class="secondary" (click)="loadItineraries()">Riprova</button>
+          </div>
+        } @else if (!itineraries().length) {
+          <p>Non hai ancora itinerari.</p>
+        } @else {
+          <ul class="drafts">
+            @for (itinerary of itineraries(); track itinerary.id) {
+              <li class="row">
+                <div>
+                  <strong>{{ itinerary.title }}</strong>
+                  <p class="status" [class.confirmed]="itinerary.status === 'confirmed'">
+                    {{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}
+                  </p>
+                </div>
+                <a
+                  class="open-link"
+                  [routerLink]="['/editor', itinerary.id]"
+                  [attr.aria-label]="'Apri itinerario: ' + itinerary.title"
+                >
+                  Apri itinerario ↗
+                </a>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    } @else if (opening()) {
+      <p role="status">Apertura dell’itinerario…</p>
+    } @else if (detailError(); as error) {
+      <p class="error" role="alert">{{ error }}</p>
+      <div><button type="button" class="secondary" (click)="retryDetail()">Riprova</button></div>
+    } @else if (detail(); as itinerary) {
+      <div class="editor-layout">
+        <section class="panel" aria-labelledby="detail-title">
+          <div class="row">
+            <h2 id="detail-title">Dati dell’itinerario</h2>
+            <span class="status" [class.confirmed]="itinerary.status === 'confirmed'">
+              {{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}
+            </span>
+          </div>
+          <dl>
+            @for (field of fields; track field.key) {
+              @if (field.key !== 'title') {
+                <dt>{{ field.label }}</dt>
+                <dd>{{ itinerary[field.key] ?? '—' }}</dd>
+              }
+            }
+          </dl>
+          <h3>Tappe fisse</h3>
+          @if (itinerary.stops.length) {
+            <ol class="ordered-stops" aria-label="Ordine di visita salvato">
+              @for (stop of itinerary.stops; track $index) {
+                <li>{{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}</li>
+              }
+            </ol>
+          } @else {
+            <p>L’itinerario è ancora senza tappe.</p>
+          }
+          @if (itinerary.status === 'pending') {
+            @if (confirmError(); as error) {
+              <p class="error" role="alert">{{ error }}</p>
+            }
+            @if (itinerary.stops.length < 2) {
+              <p>Per pubblicare aggiungi almeno due tappe fisse.</p>
+            }
+            <div class="actions">
               <button
                 type="button"
                 class="secondary"
                 [disabled]="saving()"
-                [attr.aria-label]="'Apri itinerario: ' + itinerary.title"
-                [routerLink]="['/editor', itinerary.id]"
+                (click)="editItinerary(itinerary)"
               >
-                Apri itinerario
+                Modifica itinerario
               </button>
-            </li>
-          }
-        </ul>
-      }
-    </section>
-  }
-
-  @if (opening()) {
-    <p role="status">Apertura dell’itinerario…</p>
-  }
-  @if (detailError(); as error) {
-    <p class="error" role="alert">{{ error }}</p>
-    <button type="button" class="secondary" (click)="retryDetail()">Riprova</button>
-  }
-  @if (detail(); as itinerary) {
-    <section class="panel" aria-labelledby="detail-title">
-      <h2 id="detail-title">Dati dell’itinerario</h2>
-      <dl>
-        <dt>Stato</dt>
-        <dd>{{ itinerary.status === 'confirmed' ? 'Confermato' : 'In attesa di conferma' }}</dd>
-        @for (field of fields; track field.key) {
-          <dt>{{ field.label }}</dt>
-          <dd>{{ itinerary[field.key] ?? '—' }}</dd>
-        }
-      </dl>
-      @if (editingStops()) {
-        <form (submit)="$event.preventDefault(); saveStops(itinerary.id)">
-          <fieldset [disabled]="saving()">
-            @if (!catalogLoading() && !catalogError()) {
-              <app-stop-picker
-                [catalog]="catalog()"
-                [selected]="selectedStops()"
-                (selectedChange)="changeStops($event)"
-                [error]="stopError()"
-              />
-            }
-            @if (saveError()) {
-              <p class="error" role="alert">Impossibile aggiornare le tappe. Riprova.</p>
-            }
-            <div class="actions">
-              <button type="submit" [disabled]="catalogLoading()">Salva tappe</button>
-              <button type="button" class="secondary" (click)="editingStops.set(false)">
-                Annulla
+              <button
+                type="button"
+                [disabled]="saving() || itinerary.stops.length < 2"
+                (click)="confirmItinerary(itinerary)"
+              >
+                {{ saving() ? 'Conferma in corso…' : 'Conferma itinerario' }}
               </button>
             </div>
-          </fieldset>
-        </form>
-      } @else {
-        <h3>Tappe fisse</h3>
-        @if (itinerary.stops.length) {
-          <ol class="ordered-stops" aria-label="Ordine di visita salvato">
-            @for (stop of itinerary.stops; track $index) {
-              <li>{{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}</li>
-            }
-          </ol>
-        } @else {
-          <p>L’itinerario è ancora senza tappe.</p>
-        }
-        @if (itinerary.status === 'pending') {
-          @if (confirmError()) {
-            <p class="error" role="alert">Impossibile confermare l’itinerario. Riprova.</p>
-          }
-          <div class="actions">
-            <button
-              type="button"
-              class="secondary"
-              [disabled]="saving()"
-              (click)="editStops(itinerary)"
+          } @else {
+            <form
+              class="participation"
+              novalidate
+              (submit)="$event.preventDefault(); saveParticipation(itinerary)"
             >
-              Modifica tappe
-            </button>
-            <button type="button" [disabled]="saving()" (click)="confirmItinerary(itinerary)">
-              {{ saving() ? 'Conferma in corso…' : 'Conferma itinerario' }}
-            </button>
-          </div>
-        }
-      }
-    </section>
-  }
-</main>
+              <fieldset
+                [disabled]="
+                  saving() || (itinerary.stops.length < 2 && !itinerary.acceptsEconomicStops)
+                "
+              >
+                <legend>Partecipazione degli operatori economici</legend>
+                <label class="check">
+                  <input type="checkbox" [formControl]="participationOpen" />
+                  Accetta proposte di esperienze
+                </label>
+                @if (participationOpen.value) {
+                  <div class="field">
+                    <label for="average-price"
+                      >Prezzo medio stimato del percorso (€ a persona)</label
+                    >
+                    <input
+                      id="average-price"
+                      type="number"
+                      min="0"
+                      max="9999999.99"
+                      step="0.01"
+                      required
+                      [formControl]="averageTripPrice"
+                    />
+                  </div>
+                }
+                @if (participationError(); as error) {
+                  <p class="error" role="alert">{{ error }}</p>
+                }
+                <div><button type="submit" class="secondary">Salva partecipazione</button></div>
+              </fieldset>
+              @if (itinerary.stops.length < 2) {
+                <p>Servono almeno due tappe per aprire la partecipazione.</p>
+              }
+            </form>
+          }
+        </section>
+        <section class="map-card" aria-labelledby="saved-map-title">
+          <header><h2 id="saved-map-title">Percorso</h2></header>
+          <app-route-map [stops]="itinerary.stops" [area]="itinerary.geographicArea || 'Italia'" />
+        </section>
+      </div>
+    }
+  </main>
+</div>

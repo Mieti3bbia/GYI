@@ -41,11 +41,6 @@ ALTER TABLE fyi.stop
     DROP CONSTRAINT IF EXISTS stop_coordinates_unique;
 
 -- Distinct catalog sites may share a name or a building. Keep both legacy constraints for manual stops.
-CREATE UNIQUE INDEX IF NOT EXISTS stop_manual_name_unique ON fyi.stop (name) WHERE source_url IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS stop_manual_coordinates_unique
-    ON fyi.stop (coordinatex, coordinatey) WHERE source_url IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS stop_source_url_unique ON fyi.stop (source_url);
-
 CREATE TABLE IF NOT EXISTS fyi.itinerary (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     title varchar NOT NULL UNIQUE,
@@ -62,9 +57,39 @@ CREATE TABLE IF NOT EXISTS fyi.itinerary (
 
 ALTER TABLE fyi.itinerary
     ADD COLUMN IF NOT EXISTS theme varchar,
-    ADD COLUMN IF NOT EXISTS geographic_area varchar;
+    ADD COLUMN IF NOT EXISTS geographic_area varchar,
+    ADD COLUMN IF NOT EXISTS accepts_economic_stops boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS average_trip_price numeric;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'fyi.itinerary'::regclass AND conname = 'itinerary_participation_valid'
+    ) THEN
+        ALTER TABLE fyi.itinerary ADD CONSTRAINT itinerary_participation_valid CHECK (
+            (NOT accepts_economic_stops AND average_trip_price IS NULL)
+            OR (accepts_economic_stops AND status = 'confirmed' AND average_trip_price IS NOT NULL
+                AND average_trip_price >= 0 AND average_trip_price = round(average_trip_price, 2)
+                AND average_trip_price <= 9999999.99)
+        );
+    END IF;
+END $$;
 
 UPDATE fyi.itinerary SET status = 'pending' WHERE status IN ('Draft', 'draft');
+
+ALTER TABLE fyi.stop
+    ADD COLUMN IF NOT EXISTS draft_itinerary_id uuid REFERENCES fyi.itinerary (id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS stop_catalog_manual_name_unique
+    ON fyi.stop (name) WHERE source_url IS NULL AND draft_itinerary_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS stop_catalog_manual_coordinates_unique
+    ON fyi.stop (coordinatex, coordinatey) WHERE source_url IS NULL AND draft_itinerary_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS stop_catalog_source_url_unique
+    ON fyi.stop (source_url) WHERE draft_itinerary_id IS NULL;
+DROP INDEX IF EXISTS fyi.stop_source_url_unique;
+DROP INDEX IF EXISTS fyi.stop_manual_name_unique;
+DROP INDEX IF EXISTS fyi.stop_manual_coordinates_unique;
 
 CREATE TABLE IF NOT EXISTS fyi.itinerary_stops (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,6 +1,7 @@
 using FYI.Application;
 using FYI.Managers.Database;
 using GYI.src.factories;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Npgsql;
 
 var envPath = Path.Combine(Environment.CurrentDirectory, ".env");
@@ -12,6 +13,24 @@ if (File.Exists(envPath))
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
+{
+    options.Cookie.Name = "gyi.editor";
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
+builder.Services.AddAuthorization();
 
 string connectionString;
 try
@@ -44,6 +63,8 @@ if (!await initializer.InitializeAsync())
 
 if (app.Environment.IsDevelopment())
 {
+    app.UseAuthentication();
+    app.UseAuthorization();
     app.MapControllers();
 }
 

@@ -85,7 +85,10 @@ export class RouteMap {
 
       this.route.addTo(instance);
       this.instance.set(instance);
-      const resize = new ResizeObserver(() => instance.invalidateSize({ pan: false }));
+      const resize = new ResizeObserver(() => {
+        instance.invalidateSize({ pan: false });
+        this.center();
+      });
       resize.observe(element);
       this.destroyRef.onDestroy(() => {
         resize.disconnect();
