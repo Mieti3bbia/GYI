@@ -6,6 +6,10 @@ public sealed class Stop
     public required string Name { get; set; }
     public required string Description { get; set; }
     public required string Status { get; set; }
+    public bool IsFixed { get; set; }
+    public string? Municipality { get; set; }
+    public string? Province { get; set; }
+    public string? SourceUrl { get; set; }
     public decimal Cap { get; set; }
     public decimal Price { get; set; }
     public decimal CoordinateX { get; set; }

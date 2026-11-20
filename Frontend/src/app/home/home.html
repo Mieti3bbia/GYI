@@ -1,0 +1,25 @@
+<main class="shell login">
+  <div class="panel">
+    <h1>Accedi a GYI</h1>
+    <form [formGroup]="form" (ngSubmit)="login()">
+      <div class="field">
+        <label for="username">Nome utente</label>
+        <input id="username" autocomplete="username" formControlName="username" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          formControlName="password"
+          required
+        />
+      </div>
+      @if (failed()) {
+        <p class="error" role="alert">Nome utente o password non validi.</p>
+      }
+      <button type="submit">Accedi</button>
+    </form>
+  </div>
+</main>

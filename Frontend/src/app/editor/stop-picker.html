@@ -1,0 +1,75 @@
+<fieldset
+  class="stop-picker"
+  [attr.aria-describedby]="error() ? 'stop-selection-error' : 'stop-hint'"
+>
+  <legend>Tappe fisse</legend>
+  <p id="stop-hint">Aggiungi le tappe e disponile nell’ordine di visita.</p>
+  <div class="field">
+    <label for="stop-search">Cerca per nome, comune o provincia</label>
+    <input id="stop-search" type="search" #searchInput (input)="search(searchInput.value)" />
+  </div>
+  <div class="field">
+    <label for="catalog-stop">Tappa da aggiungere</label>
+    <select
+      id="catalog-stop"
+      #stopSelect
+      [value]="choice()"
+      (change)="choice.set(stopSelect.value)"
+    >
+      <option value="">
+        {{ available().length ? 'Seleziona una tappa' : 'Nessuna tappa disponibile' }}
+      </option>
+      @for (stop of available(); track stop.id) {
+        <option [value]="stop.id">
+          {{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}
+        </option>
+      }
+    </select>
+    <button type="button" class="secondary" [disabled]="!choice()" (click)="add()">
+      Aggiungi tappa
+    </button>
+  </div>
+  @if (error(); as message) {
+    <p class="error" id="stop-selection-error" role="alert">{{ message }}</p>
+  }
+  @if (selected().length) {
+    <ol class="ordered-stops" aria-label="Ordine di visita">
+      @for (stop of selected(); track stop.id; let index = $index, first = $first, last = $last) {
+        <li>
+          <strong>{{ stop.name }}</strong>
+          @if (stop.municipality) {
+            <span> — {{ stop.municipality }}</span>
+          }
+          <div class="actions">
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="first"
+              [attr.aria-label]="'Sposta prima: ' + stop.name"
+              (click)="move(index, -1)"
+            >
+              Sposta prima
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [disabled]="last"
+              [attr.aria-label]="'Sposta dopo: ' + stop.name"
+              (click)="move(index, 1)"
+            >
+              Sposta dopo
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              [attr.aria-label]="'Rimuovi: ' + stop.name"
+              (click)="remove(index)"
+            >
+              Rimuovi
+            </button>
+          </div>
+        </li>
+      }
+    </ol>
+  }
+</fieldset>

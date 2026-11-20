@@ -1,8 +1,12 @@
+using FYI.Application;
 using FYI.Managers.Database;
+using GYI.src.factories;
 using Npgsql;
 
-using (var envFile = File.OpenRead(Path.Combine(Environment.CurrentDirectory, ".env")))
+var envPath = Path.Combine(Environment.CurrentDirectory, ".env");
+if (File.Exists(envPath))
 {
+    using var envFile = File.OpenRead(envPath);
     DotNetEnv.Env.Load(envFile, new DotNetEnv.LoadOptions(clobberExistingVars: false));
 }
 
@@ -13,7 +17,7 @@ string connectionString;
 try
 {
     connectionString = DatabaseConfiguration.CreateConnectionString(
-        Environment.GetEnvironmentVariable("url"));
+        builder.Configuration.GetConnectionString("Postgres"), builder.Configuration["url"]);
 }
 catch (FormatException exception)
 {
@@ -24,6 +28,11 @@ catch (FormatException exception)
 builder.Services.AddSingleton<NpgsqlDataSource>(
     _ => NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton<DatabaseInitializer>();
+builder.Services.AddSingleton<IDBService, PostgresDBService>();
+builder.Services.AddSingleton<DBManager>();
+builder.Services.AddSingleton<ItineraryFactory>();
+builder.Services.AddSingleton<SecurityManager>();
+builder.Services.AddSingleton<Coordinator>();
 
 await using var app = builder.Build();
 
@@ -33,7 +42,10 @@ if (!await initializer.InitializeAsync())
     return 1;
 }
 
-app.MapControllers();
+if (app.Environment.IsDevelopment())
+{
+    app.MapControllers();
+}
 
 await app.RunAsync();
 return 0;

@@ -4,6 +4,23 @@ namespace FYI.Managers.Database;
 
 public static class DatabaseConfiguration
 {
+    public static string CreateConnectionString(string? connectionString, string? url)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return CreateConnectionString(url);
+        }
+
+        try
+        {
+            return new NpgsqlConnectionStringBuilder(connectionString).ConnectionString;
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            throw new FormatException("ConnectionStrings:Postgres is not a valid PostgreSQL connection string.");
+        }
+    }
+
     public static string CreateConnectionString(string? url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var databaseUri)
@@ -13,7 +30,7 @@ public static class DatabaseConfiguration
             || databaseUri.AbsolutePath.Length <= 1)
         {
             throw new FormatException(
-                "The 'url' must be a complete PostgreSQL URL with credentials and database.");
+                "Configure ConnectionStrings:Postgres or provide a complete PostgreSQL URL in 'url'.");
         }
 
         var credentials = databaseUri.UserInfo.Split(':', 2);

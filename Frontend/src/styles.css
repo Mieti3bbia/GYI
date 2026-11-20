@@ -1,1 +1,183 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+  font-family: system-ui, sans-serif;
+  color: #182b25;
+  background: #f2f6f3;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  line-height: 1.15;
+}
+h2 {
+  font-size: 1.25rem;
+}
+
+.shell {
+  width: min(100% - 2rem, 48rem);
+  margin: 2rem auto;
+}
+.dashboard,
+.panel,
+form,
+fieldset {
+  display: grid;
+  gap: 1rem;
+}
+.dashboard > button {
+  justify-self: start;
+}
+.panel {
+  padding: clamp(1rem, 4vw, 1.5rem);
+  border: 1px solid #cbdad2;
+  border-radius: 14px;
+  background: white;
+}
+.field {
+  display: grid;
+  gap: 0.3rem;
+}
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+label,
+dt {
+  font-weight: 650;
+}
+input,
+textarea,
+button {
+  font: inherit;
+}
+input,
+textarea {
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  border: 1px solid #6e8478;
+  border-radius: 8px;
+}
+textarea {
+  resize: vertical;
+}
+[aria-invalid='true'] {
+  border-color: #a22424;
+}
+button {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #19543c;
+  border-radius: 8px;
+  background: #19543c;
+  color: white;
+  cursor: pointer;
+}
+button.secondary {
+  background: white;
+  color: #19543c;
+}
+button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+:focus-visible {
+  outline: 3px solid #206db5;
+  outline-offset: 3px;
+}
+.row,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.row {
+  justify-content: space-between;
+}
+.error {
+  color: #9e2222;
+}
+.success {
+  color: #19543c;
+}
+.drafts,
+dl {
+  margin: 0;
+  padding: 0;
+}
+.drafts {
+  list-style: none;
+}
+.drafts li {
+  border-top: 1px solid #cbdad2;
+  padding: 0.75rem 0;
+}
+.drafts li:last-child {
+  padding-bottom: 0;
+}
+.drafts strong,
+dd {
+  overflow-wrap: anywhere;
+}
+
+.stop-picker {
+  border: 1px solid #cbdad2;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.stop-picker legend {
+  padding-inline: 0.35rem;
+  font-weight: 650;
+}
+
+.stop-picker select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #6e8478;
+  border-radius: 8px;
+  background: white;
+  font: inherit;
+}
+
+.stop-picker .field > button {
+  justify-self: start;
+}
+
+.ordered-stops {
+  margin: 0;
+  padding-inline-start: 1.75rem;
+  overflow-wrap: anywhere;
+}
+
+.ordered-stops li + li {
+  margin-top: 0.75rem;
+}
+
+.ordered-stops .actions {
+  margin-top: 0.35rem;
+}
+
+h3 {
+  margin: 0;
+}
+dt:not(:first-child) {
+  margin-top: 0.75rem;
+}
+dd {
+  margin: 0;
+  white-space: pre-wrap;
+}

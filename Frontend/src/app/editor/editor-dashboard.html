@@ -1,0 +1,179 @@
+<main class="shell dashboard">
+  <header class="row">
+    <h1>{{ detailId() ? 'Dettaglio itinerario' : 'I miei itinerari' }}</h1>
+    <button type="button" class="secondary" (click)="logout()">Esci</button>
+  </header>
+
+  @if (detailId()) {
+    <button type="button" class="secondary" [routerLink]="dashboardLink">
+      Torna agli itinerari
+    </button>
+  } @else if (!creating()) {
+    <button type="button" [disabled]="loading() || saving()" (click)="newDraft()">
+      Nuovo itinerario
+    </button>
+  }
+  @if (stopsSaved()) {
+    <p class="success" role="status">Tappe aggiornate.</p>
+  }
+  @if ((creating() || editingStops()) && catalogLoading()) {
+    <p role="status">Caricamento del catalogo delle tappe…</p>
+  }
+  @if ((creating() || editingStops()) && catalogError()) {
+    <div class="panel">
+      <p class="error" role="alert">Impossibile caricare il catalogo delle tappe fisse.</p>
+      <button type="button" class="secondary" (click)="loadCatalog()">Ricarica catalogo</button>
+    </div>
+  }
+  @if (creating()) {
+    <section class="panel" aria-labelledby="new-draft-title">
+      <h2 id="new-draft-title">Nuovo itinerario</h2>
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <fieldset [disabled]="saving()">
+          @for (field of fields; track field.key) {
+            @let error = fieldError(field.key);
+            <div class="field">
+              <label [for]="field.key">{{ field.label }}</label>
+              @if (field.key === 'description') {
+                <textarea
+                  [id]="field.key"
+                  [formControlName]="field.key"
+                  rows="4"
+                  required
+                  [attr.aria-invalid]="error ? 'true' : null"
+                  [attr.aria-describedby]="error ? field.key + '-error' : null"
+                ></textarea>
+              } @else {
+                <input
+                  [id]="field.key"
+                  [formControlName]="field.key"
+                  required
+                  [attr.aria-invalid]="error ? 'true' : null"
+                  [attr.aria-describedby]="error ? field.key + '-error' : null"
+                />
+              }
+              @if (error) {
+                <p class="error" [id]="field.key + '-error'" role="alert">{{ error }}</p>
+              }
+            </div>
+          }
+          @if (!catalogLoading() && !catalogError()) {
+            <app-stop-picker
+              [catalog]="catalog()"
+              [selected]="selectedStops()"
+              (selectedChange)="changeStops($event)"
+              [error]="stopError()"
+            />
+          }
+          @if (saveError()) {
+            <p class="error" role="alert">Impossibile salvare la bozza. Riprova.</p>
+          }
+          <div class="actions">
+            <button type="submit" [disabled]="loading() || catalogLoading()">
+              {{ saving() ? 'Salvataggio…' : 'Salva bozza' }}
+            </button>
+            <button type="button" class="secondary" (click)="creating.set(false)">Annulla</button>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+  }
+
+  @if (!detailId()) {
+    <section class="panel" aria-labelledby="drafts-title">
+      <h2 id="drafts-title">Bozze</h2>
+      @if (loading()) {
+        <p role="status">Caricamento delle bozze…</p>
+      }
+      @if (listError()) {
+        <p class="error" role="alert">Impossibile caricare le bozze.</p>
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="loading() || saving()"
+          (click)="loadDrafts()"
+        >
+          Riprova
+        </button>
+      } @else if (!loading() && drafts().length === 0) {
+        <p>Non hai ancora bozze.</p>
+      }
+      @if (drafts().length > 0) {
+        <ul class="drafts">
+          @for (draft of drafts(); track draft.id) {
+            <li class="row">
+              <strong>{{ draft.title }}</strong>
+              <button
+                type="button"
+                class="secondary"
+                [disabled]="saving()"
+                [attr.aria-label]="'Apri bozza: ' + draft.title"
+                [routerLink]="['/editor', draft.id]"
+              >
+                Apri bozza
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (opening()) {
+    <p role="status">Apertura della bozza…</p>
+  }
+  @if (detailError(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+    <button type="button" class="secondary" (click)="retryDetail()">Riprova</button>
+  }
+  @if (detail(); as draft) {
+    <section class="panel" aria-labelledby="detail-title">
+      <h2 id="detail-title">Dettaglio bozza</h2>
+      <dl>
+        @for (field of fields; track field.key) {
+          <dt>{{ field.label }}</dt>
+          <dd>{{ draft[field.key] ?? '—' }}</dd>
+        }
+      </dl>
+      @if (editingStops()) {
+        <form (submit)="$event.preventDefault(); saveStops(draft.id)">
+          <fieldset [disabled]="saving()">
+            @if (!catalogLoading() && !catalogError()) {
+              <app-stop-picker
+                [catalog]="catalog()"
+                [selected]="selectedStops()"
+                (selectedChange)="changeStops($event)"
+                [error]="stopError()"
+              />
+            }
+            @if (saveError()) {
+              <p class="error" role="alert">Impossibile aggiornare le tappe. Riprova.</p>
+            }
+            <div class="actions">
+              <button type="submit" [disabled]="catalogLoading()">
+                Salva tappe
+              </button>
+              <button type="button" class="secondary" (click)="editingStops.set(false)">
+                Annulla
+              </button>
+            </div>
+          </fieldset>
+        </form>
+      } @else {
+        <h3>Tappe fisse</h3>
+        @if (draft.stops.length) {
+          <ol class="ordered-stops" aria-label="Ordine di visita salvato">
+            @for (stop of draft.stops; track $index) {
+              <li>{{ stop.name }}{{ stop.municipality ? ' — ' + stop.municipality : '' }}</li>
+            }
+          </ol>
+        } @else {
+          <p>La bozza è ancora senza tappe.</p>
+        }
+        <div>
+          <button type="button" class="secondary" (click)="editStops(draft)">Modifica tappe</button>
+        </div>
+      }
+    </section>
+  }
+</main>

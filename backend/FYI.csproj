@@ -17,6 +17,10 @@
           TargetPath="Database\init.sql"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
+    <None Update="src\managers\Database\seed-marche.sql"
+          TargetPath="Database\seed-marche.sql"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
