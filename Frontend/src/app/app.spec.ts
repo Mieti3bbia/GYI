@@ -1,18 +1,22 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { App } from './app';
 import { routes } from './app.routes';
 import { DemoSession } from './auth/demo-session';
+import { RouteMap } from './home/route-map';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
-    }).compileComponents();
+    })
+      .overrideComponent(RouteMap, { set: { template: '' } })
+      .compileComponents();
   });
 
   afterEach(() => {
@@ -26,10 +30,50 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('redirects the root to the login page', async () => {
+  it('redirects the root to the itinerary map and shows an empty catalog', async () => {
     const harness = await RouterTestingHarness.create('/');
+    TestBed.inject(HttpTestingController).expectOne('/api/itineraries/mine').flush([]);
+    harness.detectChanges();
     expect(TestBed.inject(Router).url).toBe('/home');
-    expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe('Accedi a GYI');
+    expect(harness.routeNativeElement?.querySelector('h1')?.textContent).toBe(
+      'L’Italia, tappa dopo tappa.',
+    );
+    expect(harness.routeNativeElement?.textContent).toContain('Nessun itinerario disponibile');
+  });
+
+  it('shows confirmed itineraries only and sends the selected visit order to the map', async () => {
+    const harness = await RouterTestingHarness.create('/home');
+    const http = TestBed.inject(HttpTestingController);
+    const first = { id: 'first', title: 'Tra i borghi', status: 'confirmed' };
+    const second = { id: 'second', title: 'Lungo la costa', status: 'confirmed' };
+    http
+      .expectOne('/api/itineraries/mine')
+      .flush([first, { id: 'draft', title: 'Proposta in attesa', status: 'pending' }, second]);
+    const firstRequest = http.expectOne('/api/itineraries/first');
+    harness.detectChanges();
+    const menu = harness.routeNativeElement!.querySelector<HTMLSelectElement>('#home-itinerary')!;
+    expect(Array.from(menu.options, (option) => option.textContent)).toEqual([
+      'Tra i borghi',
+      'Lungo la costa',
+    ]);
+    menu.value = second.id;
+    menu.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(firstRequest.cancelled).toBe(true);
+    const stops = [
+      { id: '2', name: 'Porto Recanati', latitude: 43.43, longitude: 13.66 },
+      { id: '1', name: 'Numana', latitude: 43.51, longitude: 13.62 },
+    ];
+    http.expectOne('/api/itineraries/second').flush({ ...second, geographicArea: 'Marche', stops });
+    harness.detectChanges();
+
+    const map = harness.routeDebugElement!.query(By.directive(RouteMap))
+      .componentInstance as RouteMap;
+    expect(map.stops()).toEqual(stops);
+    expect(map.area()).toBe('Marche');
+    const firstStop = harness.routeNativeElement!.querySelector<HTMLButtonElement>('.stop')!;
+    firstStop.click();
+    harness.detectChanges();
+    expect(map.activeStopId()).toBe('2');
   });
 
   it('shows the saved visit order and lets the editor confirm the proposal', async () => {

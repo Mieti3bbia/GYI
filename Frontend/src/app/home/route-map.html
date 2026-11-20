@@ -1,0 +1,16 @@
+<div class="route-map">
+  <div #surface class="route-map__surface" role="region" aria-label="Mappa delle tappe"></div>
+  <div class="route-map__area">{{ area() }}</div>
+  <button
+    type="button"
+    class="route-map__center"
+    (click)="center()"
+    aria-label="Centra la mappa"
+    title="Centra la mappa"
+  >
+    <span aria-hidden="true">⌖</span>
+  </button>
+  @if (tilesUnavailable()) {
+    <p class="route-map__notice" role="status">Carta geografica momentaneamente non disponibile.</p>
+  }
+</div>
